@@ -1,9 +1,13 @@
 #!/usr/bin/env python3.7
+# Copyright (c) 2018 Lynn Root
+"""
+Exception handling with non-top-level coroutines.
 
-# exception handling
+Notice! This requires:
+ - attrs==18.1.0
+"""
 
 import asyncio
-import functools
 import logging
 import random
 import signal
@@ -12,6 +16,11 @@ import uuid
 
 import attr
 
+
+# NB: Using f-strings with log messages may not be ideal since no matter
+# what the log level is set at, f-strings will always be evaluated
+# whereas the old form ('foo %s' % 'bar') is lazily-evaluated.
+# But I just love f-strings.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s,%(msecs)d %(levelname)s: %(message)s',
@@ -21,83 +30,130 @@ logging.basicConfig(
 
 @attr.s
 class PubSubMessage:
-    msg_id = attr.ib(repr=False)
     instance_name = attr.ib()
-    hostname = attr.ib(repr=False, init=False)
+    message_id    = attr.ib(repr=False)
+    hostname      = attr.ib(repr=False, init=False)
 
     def __attrs_post_init__(self):
         self.hostname = f'{self.instance_name}.example.net'
 
+
 async def publish(queue):
+    """Simulates an external publisher of messages.
+
+    Attrs:
+        queue (asyncio.Queue): Queue to publish messages to.
+    """
+    choices = string.ascii_lowercase + string.digits
+
     while True:
         msg_id = str(uuid.uuid4())
-        choices = string.ascii_lowercase + string.digits
         host_id = ''.join(random.choices(choices, k=4))
         instance_name = f'cattle-{host_id}'
-        msg = PubSubMessage(msg_id=msg_id, instance_name=instance_name)
+        msg = PubSubMessage(message_id=msg_id, instance_name=instance_name)
         # publish an item
-        logging.debug(f'Published message {msg}')
-        # put the item in the queue
         await queue.put(msg)
+        logging.debug(f'Published message {msg}')
         # simulate randomness of publishing messages
         await asyncio.sleep(random.random())
 
+
 async def restart_host(msg):
+    """Restart a given host.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message for a particular
+            host to be restarted.
+    """
     # faked error
     rand_int = random.randrange(1, 3)
     if rand_int == 2:
         raise Exception(f'Could not restart {msg.hostname}')
+
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.randrange(1,3))
     logging.info(f'Restarted {msg.hostname}')
 
+
 async def save(msg):
+    """Save message to a database.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message to be saved.
+    """
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.random())
     logging.info(f'Saved {msg} into database')
 
+
 async def cleanup(msg, event):
+    """Cleanup tasks related to completing work on a message.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message that is done being
+            processed.
+        event (asyncio.Event): event to watch for message cleanup.
+    """
     # this will block the rest of the coro until `event.set` is called
     await event.wait()
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.random())
     logging.info(f'Done. Acked {msg}')
 
+
 async def extend(msg, event):
+    """Periodically extend the message acknowledgement deadline.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message to extend.
+        event (asyncio.Event): event to watch for message extention.
+    """
     while not event.is_set():
         logging.info(f'Extended deadline by 3 seconds for {msg}')
         # want to sleep for less than the deadline amount
         await asyncio.sleep(2)
 
+
 def handle_results(results):
+    """Parse out successful and errored results."""
     for result in results:
         if isinstance(result, Exception):
             logging.error(f'Caught exception: {result}')
 
+
 async def handle_message(msg):
+    """Kick off tasks for a given message.
+
+    Attrs:
+        msg (PubSubMessage): consumed message to process.
+    """
     event = asyncio.Event()
-
-    save_coro = save(msg)
-    restart_coro = restart_host(msg)
-
     asyncio.create_task(extend(msg, event))
     asyncio.create_task(cleanup(msg, event))
 
     results = await asyncio.gather(
-        save_coro, restart_coro #, return_exceptions=True
+        save(msg), restart_host(msg), return_exceptions=True
     )
     handle_results(results)
     event.set()
 
+
 async def consume(queue):
+    """Consumer client to simulate subscribing to a publisher.
+
+    Attrs:
+        queue (asyncio.Queue): Queue from which to consume messages.
+    """
     while True:
         msg = await queue.get()
         logging.info(f'Pulled {msg}')
         asyncio.create_task(handle_message(msg))
 
-async def handle_exception(fn, loop):
+
+async def handle_exception(coro, loop):
+    """Wrapper for coroutines to catch exceptions & stop loop."""
     try:
-        await fn()
+        await coro
     except asyncio.CancelledError:
         logging.info(f'Coroutine cancelled')
     except Exception:
@@ -105,23 +161,24 @@ async def handle_exception(fn, loop):
     finally:
         loop.stop()
 
+
 async def shutdown(signal, loop):
+    """Cleanup tasks tied to the service's shutdown."""
     logging.info(f'Received exit signal {signal.name}...')
     logging.info('Closing database connections')
     logging.info('Nacking outstanding messages')
     tasks = [t for t in asyncio.all_tasks() if t is not
              asyncio.current_task()]
 
-    for i, task in enumerate(tasks):
-        task.cancel()
+    [task.cancel() for task in tasks]
 
-    logging.info('Cancelling outstanding tasks')
+    logging.info(f'Cancelling {len(tasks)} outstanding tasks')
     await asyncio.gather(*tasks)
     loop.stop()
     logging.info('Shutdown complete.')
 
+
 if __name__ == '__main__':
-    queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
     # May want to catch other signals too
@@ -130,10 +187,9 @@ if __name__ == '__main__':
         loop.add_signal_handler(
             s, lambda s=s: asyncio.create_task(shutdown(s, loop)))
 
-    publisher_fn = functools.partial(publish, queue)
-    consumer_fn = functools.partial(consume, queue)
-    publisher_coro = handle_exception(publisher_fn, loop)
-    consumer_coro = handle_exception(consumer_fn, loop)
+    queue = asyncio.Queue()
+    publisher_coro = handle_exception(publish(queue), loop)
+    consumer_coro = handle_exception(consume(queue), loop)
 
     try:
         loop.create_task(publisher_coro)

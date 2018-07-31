@@ -1,6 +1,11 @@
 #!/usr/bin/env python3.7
+# Copyright (c) 2018 Lynn Root
+"""
+Tasks that are kicked off once other tasks are done.
 
-# cleanup once done
+Notice! This requires:
+ - attrs==18.1.0
+"""
 
 import asyncio
 import functools
@@ -11,6 +16,11 @@ import uuid
 
 import attr
 
+
+# NB: Using f-strings with log messages may not be ideal since no matter
+# what the log level is set at, f-strings will always be evaluated
+# whereas the old form ('foo %s' % 'bar') is lazily-evaluated.
+# But I just love f-strings.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s,%(msecs)d %(levelname)s: %(message)s',
@@ -20,87 +30,143 @@ logging.basicConfig(
 
 @attr.s
 class PubSubMessage:
-    msg_id = attr.ib(repr=False)
     instance_name = attr.ib()
-    hostname = attr.ib(repr=False, init=False)
+    message_id    = attr.ib(repr=False)
+    hostname      = attr.ib(repr=False, init=False)
 
     def __attrs_post_init__(self):
         self.hostname = f'{self.instance_name}.example.net'
 
+
 async def publish(queue):
+    """Simulates an external publisher of messages.
+
+    Attrs:
+        queue (asyncio.Queue): Queue to publish messages to.
+    """
+    choices = string.ascii_lowercase + string.digits
+
     while True:
         msg_id = str(uuid.uuid4())
-        choices = string.ascii_lowercase + string.digits
         host_id = ''.join(random.choices(choices, k=4))
         instance_name = f'cattle-{host_id}'
-        msg = PubSubMessage(msg_id=msg_id, instance_name=instance_name)
+        msg = PubSubMessage(message_id=msg_id, instance_name=instance_name)
         # publish an item
-        logging.debug(f'Published message {msg}')
-        # put the item in the queue
         await queue.put(msg)
+        logging.debug(f'Published message {msg}')
         # simulate randomness of publishing messages
         await asyncio.sleep(random.random())
 
+
 async def restart_host(msg):
+    """Restart a given host.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message for a particular
+            host to be restarted.
+    """
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.random())
     logging.info(f'Restarted {msg.hostname}')
 
+
 async def save(msg):
-    # unhelpful simulation of i/o work
+    """Save message to a database.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message to be saved.
+    """
     await asyncio.sleep(random.random())
     logging.info(f'Saved {msg} into database')
 
-# def cleanup(msg, fut):
-#     logging.info(f'Done. Acked {msg}')
 
-# async def handle_message(msg):
-    # save_coro = save(msg)
-    # restart_coro = restart_host(msg)
+#####
+# Illustrates a callback approach
+#####
+def cleanup_callback(msg, fut):
+    """Cleanup tasks related to completing work on a message.
 
-    # g_future = asyncio.gather(save_coro, restart_coro)
-
-    # callback = functools.partial(cleanup, msg)
-    # g_future.add_done_callback(callback)
-    # await g_future
-
-async def cleanup(msg):
+    Attrs:
+        msg (PubSubMessage): consumed event message that is done being
+            processed.
+        fut (asyncio.Future): future provided by the callback.
+    """
     logging.info(f'Done. Acked {msg}')
 
-async def handle_message(msg):
-    save_coro = save(msg)
-    restart_coro = restart_host(msg)
 
-    await asyncio.gather(save_coro, restart_coro)
+async def handle_message_callback(msg):
+    """Kick off tasks for a given message.
+
+    Attrs:
+        msg (PubSubMessage): consumed message to process.
+    """
+    g_future = asyncio.gather(save(msg), restart_host(msg))
+
+    callback = functools.partial(cleanup, msg)
+    # add_done_callback requires a non-async func
+    g_future.add_done_callback(callback)
+    await g_future
+
+
+#####
+# Illustrates an approach without callbacks
+####
+async def cleanup(msg):
+    """Cleanup tasks related to completing work on a message.
+
+    Attrs:
+        msg (PubSubMessage): consumed event message that is done being
+            processed.
+    """
+    logging.info(f'Done. Acked {msg}')
+
+
+async def handle_message(msg):
+    """Kick off tasks for a given message.
+
+    Attrs:
+        msg (PubSubMessage): consumed message to process.
+    """
+    await asyncio.gather(save(msg), restart_host(msg))
     await cleanup(msg)
 
+
 async def consume(queue):
+    """Consumer client to simulate subscribing to a publisher.
+
+    Attrs:
+        queue (asyncio.Queue): Queue from which to consume messages.
+    """
     while True:
         msg = await queue.get()
         logging.info(f'Pulled {msg}')
+        # without callbacks
         asyncio.create_task(handle_message(msg))
+        # with callbacks
+        # asyncio.create_task(handle_message_callback(msg))
 
-async def handle_exception(fn, loop):
+
+async def handle_exception(coro, loop):
+    """Wrapper for coroutines to catch exceptions & stop loop."""
     try:
-        await fn()
+        await coro
     except Exception as e:
         logging.error('Caught exception', exc_info=e)
         loop.stop()
+
 
 if __name__ == '__main__':
     queue = asyncio.Queue()
     loop = asyncio.get_event_loop()
 
-    publisher_fn = functools.partial(publish, queue)
-    consumer_fn = functools.partial(consume, queue)
-    publisher_coro = handle_exception(publisher_fn, loop)
-    consumer_coro = handle_exception(consumer_fn, loop)
+    publisher_coro = handle_exception(publish(queue), loop)
+    consumer_coro = handle_exception(consume(queue), loop)
 
     try:
         loop.create_task(publisher_coro)
         loop.create_task(consumer_coro)
         loop.run_forever()
-    # don't actually do this!
+    # probably not what you want! See `mayhem_14` for graceful shutdown
     except KeyboardInterrupt:
         logging.info('Interrupted')
     finally:

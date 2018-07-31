@@ -1,19 +1,19 @@
 #!/usr/bin/env python3.7
 # Copyright (c) 2018 Lynn Root
 """
-Calling sync code from async - simple
+Trying out `asyncio.run` for a "forever"-running service; note:
+does not perform shutdown completely (bug?).
 
 Notice! This requires:
  - attrs==18.1.0
 """
 
 import asyncio
-import concurrent.futures
+import functools
 import logging
 import random
 import signal
 import string
-import time
 import uuid
 
 import attr
@@ -47,7 +47,6 @@ async def publish(queue):
         queue (asyncio.Queue): Queue to publish messages to.
     """
     choices = string.ascii_lowercase + string.digits
-
     while True:
         msg_id = str(uuid.uuid4())
         host_id = ''.join(random.choices(choices, k=4))
@@ -68,10 +67,9 @@ async def restart_host(msg):
             host to be restarted.
     """
     # faked error
-    rand_int = random.randrange(1, 6)
+    rand_int = random.randrange(1, 3)
     if rand_int == 2:
         raise Exception(f'Could not restart {msg.hostname}')
-
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.randrange(1,3))
     logging.info(f'Restarted {msg.hostname}')
@@ -86,16 +84,6 @@ async def save(msg):
     # unhelpful simulation of i/o work
     await asyncio.sleep(random.random())
     logging.info(f'Saved {msg} into database')
-
-def save_sync(msg):
-    """Blocking version of `save` coroutine function.
-
-    Attrs:
-        msg (PubSubMessage): consumed event message to be saved.
-    """
-    # unhelpful simulation of blocking i/o work
-    time.sleep(random.random())
-    logging.info(f'[blocking] Saved {msg} into database')
 
 
 async def cleanup(msg, event):
@@ -133,22 +121,18 @@ def handle_results(results):
             logging.error(f'Caught exception: {result}')
 
 
-async def handle_message(msg, executor, loop):
+async def handle_message(msg):
     """Kick off tasks for a given message.
 
     Attrs:
         msg (PubSubMessage): consumed message to process.
-        executor (concurrent.futures.Executor): Executor to run sync
-            functions in.
-        loop (asyncio.AbstractEventLoop): main event loop.
     """
     event = asyncio.Event()
     asyncio.create_task(extend(msg, event))
     asyncio.create_task(cleanup(msg, event))
 
-    save_coro = loop.run_in_executor(executor, save_sync, msg)
     results = await asyncio.gather(
-        save_coro, restart_host(msg), return_exceptions=True
+        save(msg), restart_host(msg), return_exceptions=True
     )
     handle_results(results)
     event.set()
@@ -160,12 +144,10 @@ async def consume(queue):
     Attrs:
         queue (asyncio.Queue): Queue from which to consume messages.
     """
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
-    loop = asyncio.get_running_loop()
     while True:
         msg = await queue.get()
         logging.info(f'Pulled {msg}')
-        asyncio.create_task(handle_message(msg, executor, loop))
+        asyncio.create_task(handle_message(msg))
 
 
 async def handle_exception(coro, loop):
@@ -177,6 +159,7 @@ async def handle_exception(coro, loop):
     except Exception:
         logging.error('Caught exception')
     finally:
+        logging.info('In "finally" of handle_exception wrapper')
         loop.stop()
 
 
@@ -190,16 +173,18 @@ async def shutdown(signal, loop):
 
     [task.cancel() for task in tasks]
 
-    logging.info(f'Cancelling {len(tasks)} outstanding tasks')
-    await asyncio.gather(*tasks)
+    logging.info(f'About to cancel {len(tasks)} outstanding tasks')
+    # we don't ever get past here when shutting down
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    logging.info(f'Canceled {len(tasks)} outstanding tasks')
+
     loop.stop()
     logging.info('Shutdown complete.')
 
 
-if __name__ == '__main__':
+async def main():
     loop = asyncio.get_event_loop()
 
-    # May want to catch other signals too
     signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
     for s in signals:
         loop.add_signal_handler(
@@ -209,10 +194,8 @@ if __name__ == '__main__':
     publisher_coro = handle_exception(publish(queue), loop)
     consumer_coro = handle_exception(consume(queue), loop)
 
-    try:
-        loop.create_task(publisher_coro)
-        loop.create_task(consumer_coro)
-        loop.run_forever()
-    finally:
-        logging.info('Cleaning up')
-        loop.stop()
+    asyncio.create_task(publisher_coro)
+    await consumer_coro
+
+
+asyncio.run(main())

@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-
+# Copyright (c) 2018 Lynn Root
 """
-Notice! This requires: google-cloud-pubsub==0.35.4
-"""
+Working with threadpool executors - watching threads
 
-# working w threadpool execs
+Notice! This requires:
+ - google-cloud-pubsub==0.35.4
+
+You probably also want to run the Pub/Sub emulator to avoid calling/
+setting up production Pub/Sub. For more details, see
+https://cloud.google.com/pubsub/docs/emulator
+"""
 
 import asyncio
 import concurrent.futures
@@ -19,6 +24,10 @@ import threading
 from google.cloud import pubsub
 
 
+# NB: Using f-strings with log messages may not be ideal since no matter
+# what the log level is set at, f-strings will always be evaluated
+# whereas the old form ('foo %s' % 'bar') is lazily-evaluated.
+# But I just love f-strings.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s,%(msecs)d %(levelname)s: %(message)s',
@@ -33,6 +42,7 @@ CHOICES = string.ascii_lowercase + string.digits
 
 
 def get_publisher():
+    """Get Google Pub/Sub publisher client."""
     client = pubsub.PublisherClient()
     try:
         client.create_topic(TOPIC)
@@ -44,6 +54,7 @@ def get_publisher():
 
 
 def get_subscriber():
+    """Get Google Pub/Sub subscriber client."""
     client = pubsub.SubscriberClient()
     try:
         client.create_subscription(SUBSCRIPTION, TOPIC)
@@ -53,7 +64,9 @@ def get_subscriber():
     return client
 
 
-def publish_sync(publisher):
+def publish_sync():
+    """Publish messages to Google Pub/Sub."""
+    publisher = get_publisher()
     for msg in range(1, 6):
         msg_data = {'msg_id': ''.join(random.choices(CHOICES, k=4))}
         bytes_message = bytes(json.dumps(msg_data), encoding='utf-8')
@@ -62,6 +75,7 @@ def publish_sync(publisher):
 
 
 def consume_sync():
+    """Consume messages from Google Pub/Sub."""
     client = get_subscriber()
     def callback(msg):
         msg.ack()
@@ -71,26 +85,36 @@ def consume_sync():
     client.subscribe(SUBSCRIPTION, callback)
 
 
-async def publish(executor, loop):
-    publisher = get_publisher()
+async def publish(executor):
+    """Simulates an external publisher of messages.
+
+    Attrs:
+        executor (concurrent.futures.Executor): Executor to run sync
+            functions in.
+    """
+    loop = asyncio.get_running_loop()
     while True:
-        to_exec = loop.run_in_executor(executor, publish_sync, publisher)
-        asyncio.ensure_future(to_exec)
+        await loop.run_in_executor(executor, publish_sync)
         await asyncio.sleep(random.random())
 
 
 async def run_pubsub():
+    """Entrypoint to run pub/sub coroutines."""
     loop = asyncio.get_running_loop()
+    # add a prefix to our executor for easier identification of what
+    # threads we created versus what the google-cloud-pubsub library
+    # created
     executor = concurrent.futures.ThreadPoolExecutor(
         max_workers=5, thread_name_prefix='Mandrill')
 
     consume_coro = loop.run_in_executor(executor, consume_sync)
 
     asyncio.ensure_future(consume_coro)
-    loop.create_task(publish(executor, loop))
+    loop.create_task(publish(executor))
 
 
 async def watch_threads():
+    """Helper coroutine func to log threads."""
     while True:
         threads = threading.enumerate()
         logging.info(f'Current thread count: {len(threads)}')
@@ -102,21 +126,24 @@ async def watch_threads():
 
 
 async def run():
+    """Entrypoint to run all coroutines."""
     coros = [run_pubsub(), watch_threads()]
     await asyncio.gather(*coros)
 
 
 async def shutdown(signal, loop):
+    """Simplified shutdown coroutine function."""
     logging.info(f'Received exit signal {signal.name}...')
     loop.stop()
     logging.info('Shutdown complete.')
+
 
 if __name__ == '__main__':
     assert os.environ.get('PUBSUB_EMULATOR_HOST'), 'You should be running the emulator'
 
     loop = asyncio.get_event_loop()
 
-    # for simplicity
+    # for simplicity, probably want to catch other signals too
     loop.add_signal_handler(
         signal.SIGINT,
         lambda: asyncio.create_task(shutdown(signal.SIGINT, loop))
