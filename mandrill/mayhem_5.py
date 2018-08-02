@@ -40,7 +40,7 @@ class PubSubMessage:
 def publish(queue, n):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         queue (queue.Queue): Queue to publish messages to.
         n (int): Number of messages to publish.
     """
@@ -60,7 +60,7 @@ def publish(queue, n):
 def consume(queue):
     """Consumer client to simulate subscribing to a publisher.
 
-    Attrs:
+    Args:
         queue (queue.Queue): Queue from which to consume messages.
     """
     while True:

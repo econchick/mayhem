@@ -41,7 +41,7 @@ class PubSubMessage:
 async def publish(queue):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue to publish messages to.
     """
     choices = string.ascii_lowercase + string.digits
@@ -61,7 +61,7 @@ async def publish(queue):
 async def restart_host(msg):
     """Restart a given host.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message for a particular
             host to be restarted.
     """
@@ -73,7 +73,7 @@ async def restart_host(msg):
 async def save(msg):
     """Save message to a database.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message to be saved.
     """
     await asyncio.sleep(random.random())
@@ -86,7 +86,7 @@ async def save(msg):
 def cleanup_callback(msg, fut):
     """Cleanup tasks related to completing work on a message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message that is done being
             processed.
         fut (asyncio.Future): future provided by the callback.
@@ -97,7 +97,7 @@ def cleanup_callback(msg, fut):
 async def handle_message_callback(msg):
     """Kick off tasks for a given message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed message to process.
     """
     g_future = asyncio.gather(save(msg), restart_host(msg))
@@ -114,7 +114,7 @@ async def handle_message_callback(msg):
 async def cleanup(msg):
     """Cleanup tasks related to completing work on a message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message that is done being
             processed.
     """
@@ -124,7 +124,7 @@ async def cleanup(msg):
 async def handle_message(msg):
     """Kick off tasks for a given message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed message to process.
     """
     await asyncio.gather(save(msg), restart_host(msg))
@@ -134,7 +134,7 @@ async def handle_message(msg):
 async def consume(queue):
     """Consumer client to simulate subscribing to a publisher.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue from which to consume messages.
     """
     while True:

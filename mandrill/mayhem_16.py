@@ -43,7 +43,7 @@ class PubSubMessage:
 async def publish(queue):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue to publish messages to.
     """
     choices = string.ascii_lowercase + string.digits
@@ -63,7 +63,7 @@ async def publish(queue):
 async def restart_host(msg):
     """Restart a given host.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message for a particular
             host to be restarted.
     """
@@ -80,7 +80,7 @@ async def restart_host(msg):
 async def save(msg):
     """Save message to a database.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message to be saved.
     """
     # unhelpful simulation of i/o work
@@ -90,7 +90,7 @@ async def save(msg):
 def save_sync(msg):
     """Blocking version of `save` coroutine function.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message to be saved.
     """
     # unhelpful simulation of blocking i/o work
@@ -101,7 +101,7 @@ def save_sync(msg):
 async def cleanup(msg, event):
     """Cleanup tasks related to completing work on a message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message that is done being
             processed.
         event (asyncio.Event): event to watch for message cleanup.
@@ -116,7 +116,7 @@ async def cleanup(msg, event):
 async def extend(msg, event):
     """Periodically extend the message acknowledgement deadline.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message to extend.
         event (asyncio.Event): event to watch for message extention.
     """
@@ -136,7 +136,7 @@ def handle_results(results):
 async def handle_message(msg, executor, loop):
     """Kick off tasks for a given message.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed message to process.
         executor (concurrent.futures.Executor): Executor to run sync
             functions in.
@@ -157,7 +157,7 @@ async def handle_message(msg, executor, loop):
 async def consume(queue):
     """Consumer client to simulate subscribing to a publisher.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue from which to consume messages.
     """
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)

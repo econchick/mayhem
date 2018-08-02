@@ -88,7 +88,7 @@ def consume_sync():
 async def publish(executor):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         executor (concurrent.futures.Executor): Executor to run sync
             functions in.
     """

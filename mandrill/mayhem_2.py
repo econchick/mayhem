@@ -41,7 +41,7 @@ class PubSubMessage:
 async def publish(queue, n):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue to publish messages to.
         n (int): Number of messages to publish.
     """
@@ -61,7 +61,7 @@ async def publish(queue, n):
 async def consume(queue):
     """Consumer client to simulate subscribing to a publisher.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue from which to consume messages.
     """
     while True:

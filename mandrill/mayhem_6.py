@@ -40,7 +40,7 @@ class PubSubMessage:
 async def publish(queue):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue to publish messages to.
     """
     choices = string.ascii_lowercase + string.digits

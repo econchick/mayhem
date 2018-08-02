@@ -88,7 +88,7 @@ def publish_sync():
 async def restart_host(msg):
     """Consumer client to simulate subscribing to a publisher.
 
-    Attrs:
+    Args:
         queue (asyncio.Queue): Queue from which to consume messages.
     """
     # faked error
@@ -104,7 +104,7 @@ async def restart_host(msg):
 async def save(msg):
     """Save message to a database.
 
-    Attrs:
+    Args:
         msg (PubSubMessage): consumed event message to be saved.
     """
     # unhelpful simulation of i/o work
@@ -115,7 +115,7 @@ async def save(msg):
 async def cleanup(pubsub_msg, event):
     """Cleanup tasks related to completing work on a message.
 
-    Attrs:
+    Args:
         msg (pubsub.Message): consumed event message that is done being
             processed.
         event (asyncio.Event): event to watch for message cleanup.
@@ -138,7 +138,7 @@ def handle_results(results):
 async def handle_message(pubsub_msg):
     """Kick off tasks for a given message.
 
-    Attrs:
+    Args:
         pubsub_msg (pubsub.Message): consumed message to process.
     """
     # need to parse a pubsub_msg into our own PubSubMessage
@@ -176,7 +176,7 @@ def consume_sync():
 async def publish(executor):
     """Simulates an external publisher of messages.
 
-    Attrs:
+    Args:
         executor (concurrent.futures.Executor): Executor to run sync
             functions in.
     """
