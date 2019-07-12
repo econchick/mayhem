@@ -1,7 +1,7 @@
-# Scratch pad for "asyncio: we did it wrong" talk
+# Tutorial code for "asyncio: we did it wrong" 
 
-This repo is an accompaniment to my [`asyncio` in Practice: We Did It Wrong](https://ep2018.europython.eu/conference/talks/asyncio-in-practice-we-did-it-wrong) at [EuroPython](https://ep2018.europython.eu) in Edinburgh, Scotland in July 2018, and for [PiterPy](https://piterpy.com/en) in St. Petersburg, Russia in November 2018.
+This repo is an accompaniment to my talk titled [Advanced `asyncio`: Solving Real-World Production Problems ](https://ep2019.europython.eu/talks/cRonRef-advanced-asyncio-solving-real-world-production-problems/) at EuroPython 2019 in Basel, Switzerland; PyCon US 2019 in Cleveland, OH; EuroPython 2018 in Edinburgh, Scotland; and for PiterPy in St. Petersburg, Russia in November 2018.
 
-Follow `mayhem_mandrill.ipynb` for complete slides, code snippets, and speaker notes.
+Follow along at https://roguelynn.com/words/asyncio-we-did-it-wrong/
 
-The Python code snippets in `mayhem_mandrill.ipynb` follow those in the `mandrill/` directory.
+Talk recording can be found [here](https://www.youtube.com/watch?v=bckD_GK80oY&lc=Ugw9rZpVVSqT9WrCBEJ4AaABAg) and slides [here](https://speakerdeck.com/roguelynn/advanced-asyncio-solving-real-world-production-problems).
