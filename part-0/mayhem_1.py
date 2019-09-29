@@ -51,7 +51,7 @@ async def publish(queue, n):
     for x in range(1, n + 1):
         host_id = ''.join(random.choices(choices, k=4))
         instance_name = f'cattle-{host_id}'
-        msg = PubSubMessage(message_id=x, instance_name=f'cattle-{host_id}')
+        msg = PubSubMessage(message_id=x, instance_name=instance_name)
         await queue.put(msg)
         logging.info(f'Published {x} of {n} messages')
 
