@@ -93,7 +93,7 @@ async def save(msg):
 #####
 # Illustrates a callback approach
 #####
-def cleanup(msg, fut):
+async def cleanup(msg, fut):
     """Cleanup tasks related to completing work on a message.
 
     Args:
